@@ -3,6 +3,11 @@
 
 #define FE_MASK UINT64_C(0x7ffffffffffff)
 
+typedef struct {
+    uint64_t lo;
+    uint64_t hi;
+} fe_uint128;
+
 /*
     helper functions
 */
@@ -51,6 +56,53 @@ static void store_8(unsigned char *out, uint64_t in) {
     out[5] = (unsigned char) (in >> 40);
     out[6] = (unsigned char) (in >> 48);
     out[7] = (unsigned char) (in >> 56);
+}
+
+static fe_uint128 fe_u128_add(fe_uint128 a, fe_uint128 b) {
+    fe_uint128 out;
+
+    out.lo = a.lo + b.lo;
+    out.hi = a.hi + b.hi + (out.lo < a.lo);
+
+    return out;
+}
+
+static fe_uint128 fe_u128_add_u64(fe_uint128 a, uint64_t b) {
+    fe_uint128 out;
+
+    out.lo = a.lo + b;
+    out.hi = a.hi + (out.lo < a.lo);
+
+    return out;
+}
+
+static fe_uint128 fe_u128_mul_u64(uint64_t a, uint64_t b) {
+    uint64_t a0 = a & UINT64_C(0xffffffff);
+    uint64_t a1 = a >> 32;
+    uint64_t b0 = b & UINT64_C(0xffffffff);
+    uint64_t b1 = b >> 32;
+    uint64_t p0 = a0 * b0;
+    uint64_t p1 = a0 * b1;
+    uint64_t p2 = a1 * b0;
+    uint64_t p3 = a1 * b1;
+    uint64_t mid = p1 + p2;
+    uint64_t mid_carry = (mid < p1);
+    uint64_t lo = p0 + (mid << 32);
+    uint64_t lo_carry = (lo < p0);
+    fe_uint128 out;
+
+    out.lo = lo;
+    out.hi = p3 + (mid >> 32) + mid_carry + lo_carry;
+
+    return out;
+}
+
+static fe_uint128 fe_u128_add_mul(fe_uint128 acc, uint64_t a, uint64_t b) {
+    return fe_u128_add(acc, fe_u128_mul_u64(a, b));
+}
+
+static uint64_t fe_u128_shr51(fe_uint128 a) {
+    return (a.hi << 13) | (a.lo >> 51);
 }
 
 static void fe_reduce(fe h) {
@@ -349,81 +401,114 @@ void fe_mul(fe h, const fe f, const fe g) {
     uint64_t f2_19 = f2 * 19;
     uint64_t f3_19 = f3 * 19;
     uint64_t f4_19 = f4 * 19;
-    unsigned __int128 h0 = (unsigned __int128) f0 * g0 + (unsigned __int128) f1_19 * g4 + (unsigned __int128) f2_19 * g3 + (unsigned __int128) f3_19 * g2 + (unsigned __int128) f4_19 * g1;
-    unsigned __int128 h1 = (unsigned __int128) f0 * g1 + (unsigned __int128) f1 * g0 + (unsigned __int128) f2_19 * g4 + (unsigned __int128) f3_19 * g3 + (unsigned __int128) f4_19 * g2;
-    unsigned __int128 h2 = (unsigned __int128) f0 * g2 + (unsigned __int128) f1 * g1 + (unsigned __int128) f2 * g0 + (unsigned __int128) f3_19 * g4 + (unsigned __int128) f4_19 * g3;
-    unsigned __int128 h3 = (unsigned __int128) f0 * g3 + (unsigned __int128) f1 * g2 + (unsigned __int128) f2 * g1 + (unsigned __int128) f3 * g0 + (unsigned __int128) f4_19 * g4;
-    unsigned __int128 h4 = (unsigned __int128) f0 * g4 + (unsigned __int128) f1 * g3 + (unsigned __int128) f2 * g2 + (unsigned __int128) f3 * g1 + (unsigned __int128) f4 * g0;
+    fe_uint128 h0 = fe_u128_add_mul((fe_uint128) {0, 0}, f0, g0);
+    fe_uint128 h1 = fe_u128_add_mul((fe_uint128) {0, 0}, f0, g1);
+    fe_uint128 h2 = fe_u128_add_mul((fe_uint128) {0, 0}, f0, g2);
+    fe_uint128 h3 = fe_u128_add_mul((fe_uint128) {0, 0}, f0, g3);
+    fe_uint128 h4 = fe_u128_add_mul((fe_uint128) {0, 0}, f0, g4);
     uint64_t carry0;
     uint64_t carry1;
     uint64_t carry2;
     uint64_t carry3;
     uint64_t carry4;
 
-    carry0 = (uint64_t) (h0 >> 51);
-    h1 += carry0;
-    h0 &= FE_MASK;
-    carry1 = (uint64_t) (h1 >> 51);
-    h2 += carry1;
-    h1 &= FE_MASK;
-    carry2 = (uint64_t) (h2 >> 51);
-    h3 += carry2;
-    h2 &= FE_MASK;
-    carry3 = (uint64_t) (h3 >> 51);
-    h4 += carry3;
-    h3 &= FE_MASK;
-    carry4 = (uint64_t) (h4 >> 51);
-    h0 += (unsigned __int128) carry4 * 19;
-    h4 &= FE_MASK;
-    carry0 = (uint64_t) (h0 >> 51);
-    h1 += carry0;
-    h0 &= FE_MASK;
+    h0 = fe_u128_add_mul(h0, f1_19, g4);
+    h0 = fe_u128_add_mul(h0, f2_19, g3);
+    h0 = fe_u128_add_mul(h0, f3_19, g2);
+    h0 = fe_u128_add_mul(h0, f4_19, g1);
+    h1 = fe_u128_add_mul(h1, f1, g0);
+    h1 = fe_u128_add_mul(h1, f2_19, g4);
+    h1 = fe_u128_add_mul(h1, f3_19, g3);
+    h1 = fe_u128_add_mul(h1, f4_19, g2);
+    h2 = fe_u128_add_mul(h2, f1, g1);
+    h2 = fe_u128_add_mul(h2, f2, g0);
+    h2 = fe_u128_add_mul(h2, f3_19, g4);
+    h2 = fe_u128_add_mul(h2, f4_19, g3);
+    h3 = fe_u128_add_mul(h3, f1, g2);
+    h3 = fe_u128_add_mul(h3, f2, g1);
+    h3 = fe_u128_add_mul(h3, f3, g0);
+    h3 = fe_u128_add_mul(h3, f4_19, g4);
+    h4 = fe_u128_add_mul(h4, f1, g3);
+    h4 = fe_u128_add_mul(h4, f2, g2);
+    h4 = fe_u128_add_mul(h4, f3, g1);
+    h4 = fe_u128_add_mul(h4, f4, g0);
 
-    h[0] = (uint64_t) h0;
-    h[1] = (uint64_t) h1;
-    h[2] = (uint64_t) h2;
-    h[3] = (uint64_t) h3;
-    h[4] = (uint64_t) h4;
+    carry0 = fe_u128_shr51(h0);
+    h1 = fe_u128_add_u64(h1, carry0);
+    h0.lo &= FE_MASK;
+    h0.hi = 0;
+    carry1 = fe_u128_shr51(h1);
+    h2 = fe_u128_add_u64(h2, carry1);
+    h1.lo &= FE_MASK;
+    h1.hi = 0;
+    carry2 = fe_u128_shr51(h2);
+    h3 = fe_u128_add_u64(h3, carry2);
+    h2.lo &= FE_MASK;
+    h2.hi = 0;
+    carry3 = fe_u128_shr51(h3);
+    h4 = fe_u128_add_u64(h4, carry3);
+    h3.lo &= FE_MASK;
+    h3.hi = 0;
+    carry4 = fe_u128_shr51(h4);
+    h0 = fe_u128_add_u64(h0, carry4 * 19);
+    h4.lo &= FE_MASK;
+    h4.hi = 0;
+    carry0 = fe_u128_shr51(h0);
+    h1 = fe_u128_add_u64(h1, carry0);
+    h0.lo &= FE_MASK;
+    h0.hi = 0;
+
+    h[0] = h0.lo;
+    h[1] = h1.lo;
+    h[2] = h2.lo;
+    h[3] = h3.lo;
+    h[4] = h4.lo;
 }
 
 
 
 void fe_mul121666(fe h, fe f) {
-    unsigned __int128 h0 = (unsigned __int128) f[0] * 121666;
-    unsigned __int128 h1 = (unsigned __int128) f[1] * 121666;
-    unsigned __int128 h2 = (unsigned __int128) f[2] * 121666;
-    unsigned __int128 h3 = (unsigned __int128) f[3] * 121666;
-    unsigned __int128 h4 = (unsigned __int128) f[4] * 121666;
+    fe_uint128 h0 = fe_u128_mul_u64(f[0], 121666);
+    fe_uint128 h1 = fe_u128_mul_u64(f[1], 121666);
+    fe_uint128 h2 = fe_u128_mul_u64(f[2], 121666);
+    fe_uint128 h3 = fe_u128_mul_u64(f[3], 121666);
+    fe_uint128 h4 = fe_u128_mul_u64(f[4], 121666);
     uint64_t carry0;
     uint64_t carry1;
     uint64_t carry2;
     uint64_t carry3;
     uint64_t carry4;
 
-    carry0 = (uint64_t) (h0 >> 51);
-    h1 += carry0;
-    h0 &= FE_MASK;
-    carry1 = (uint64_t) (h1 >> 51);
-    h2 += carry1;
-    h1 &= FE_MASK;
-    carry2 = (uint64_t) (h2 >> 51);
-    h3 += carry2;
-    h2 &= FE_MASK;
-    carry3 = (uint64_t) (h3 >> 51);
-    h4 += carry3;
-    h3 &= FE_MASK;
-    carry4 = (uint64_t) (h4 >> 51);
-    h0 += (unsigned __int128) carry4 * 19;
-    h4 &= FE_MASK;
-    carry0 = (uint64_t) (h0 >> 51);
-    h1 += carry0;
-    h0 &= FE_MASK;
+    carry0 = fe_u128_shr51(h0);
+    h1 = fe_u128_add_u64(h1, carry0);
+    h0.lo &= FE_MASK;
+    h0.hi = 0;
+    carry1 = fe_u128_shr51(h1);
+    h2 = fe_u128_add_u64(h2, carry1);
+    h1.lo &= FE_MASK;
+    h1.hi = 0;
+    carry2 = fe_u128_shr51(h2);
+    h3 = fe_u128_add_u64(h3, carry2);
+    h2.lo &= FE_MASK;
+    h2.hi = 0;
+    carry3 = fe_u128_shr51(h3);
+    h4 = fe_u128_add_u64(h4, carry3);
+    h3.lo &= FE_MASK;
+    h3.hi = 0;
+    carry4 = fe_u128_shr51(h4);
+    h0 = fe_u128_add_u64(h0, carry4 * 19);
+    h4.lo &= FE_MASK;
+    h4.hi = 0;
+    carry0 = fe_u128_shr51(h0);
+    h1 = fe_u128_add_u64(h1, carry0);
+    h0.lo &= FE_MASK;
+    h0.hi = 0;
 
-    h[0] = (uint64_t) h0;
-    h[1] = (uint64_t) h1;
-    h[2] = (uint64_t) h2;
-    h[3] = (uint64_t) h3;
-    h[4] = (uint64_t) h4;
+    h[0] = h0.lo;
+    h[1] = h1.lo;
+    h[2] = h2.lo;
+    h[3] = h3.lo;
+    h[4] = h4.lo;
 }
 
 
