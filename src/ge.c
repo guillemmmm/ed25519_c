@@ -1,5 +1,4 @@
 #include "ge.h"
-#include "precomp_data.h"
 
 
 /*
@@ -68,12 +67,25 @@ void ge_double_scalarmult_vartime(ge_p2 *r, const unsigned char *a, const ge_p3 
     signed char aslide[256];
     signed char bslide[256];
     ge_cached Ai[8]; /* A,3A,5A,7A,9A,11A,13A,15A */
+    ge_cached Bi[8]; /* B,3B,5B,7B,9B,11B,13B,15B */
     ge_p1p1 t;
     ge_p3 u;
     ge_p3 A2;
+    ge_p3 B;
+    ge_p3 B2;
     int i;
+    static const unsigned char basepoint[32] = {
+        0x58, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
+        0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
+        0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
+        0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66
+    };
+
+    ge_frombytes_negate_vartime(&B, basepoint);
+
     slide(aslide, a);
     slide(bslide, b);
+
     ge_p3_to_cached(&Ai[0], A);
     ge_p3_dbl(&t, A);
     ge_p1p1_to_p3(&A2, &t);
@@ -98,6 +110,32 @@ void ge_double_scalarmult_vartime(ge_p2 *r, const unsigned char *a, const ge_p3 
     ge_add(&t, &A2, &Ai[6]);
     ge_p1p1_to_p3(&u, &t);
     ge_p3_to_cached(&Ai[7], &u);
+
+    ge_p3_to_cached(&Bi[0], &B);
+    ge_p3_dbl(&t, &B);
+    ge_p1p1_to_p3(&B2, &t);
+    ge_add(&t, &B2, &Bi[0]);
+    ge_p1p1_to_p3(&u, &t);
+    ge_p3_to_cached(&Bi[1], &u);
+    ge_add(&t, &B2, &Bi[1]);
+    ge_p1p1_to_p3(&u, &t);
+    ge_p3_to_cached(&Bi[2], &u);
+    ge_add(&t, &B2, &Bi[2]);
+    ge_p1p1_to_p3(&u, &t);
+    ge_p3_to_cached(&Bi[3], &u);
+    ge_add(&t, &B2, &Bi[3]);
+    ge_p1p1_to_p3(&u, &t);
+    ge_p3_to_cached(&Bi[4], &u);
+    ge_add(&t, &B2, &Bi[4]);
+    ge_p1p1_to_p3(&u, &t);
+    ge_p3_to_cached(&Bi[5], &u);
+    ge_add(&t, &B2, &Bi[5]);
+    ge_p1p1_to_p3(&u, &t);
+    ge_p3_to_cached(&Bi[6], &u);
+    ge_add(&t, &B2, &Bi[6]);
+    ge_p1p1_to_p3(&u, &t);
+    ge_p3_to_cached(&Bi[7], &u);
+
     ge_p2_0(r);
 
     for (i = 255; i >= 0; --i) {
@@ -119,10 +157,10 @@ void ge_double_scalarmult_vartime(ge_p2 *r, const unsigned char *a, const ge_p3 
 
         if (bslide[i] > 0) {
             ge_p1p1_to_p3(&u, &t);
-            ge_madd(&t, &u, &Bi[bslide[i] / 2]);
+            ge_add(&t, &u, &Bi[bslide[i] / 2]);
         } else if (bslide[i] < 0) {
             ge_p1p1_to_p3(&u, &t);
-            ge_msub(&t, &u, &Bi[(-bslide[i]) / 2]);
+            ge_sub(&t, &u, &Bi[(-bslide[i]) / 2]);
         }
 
         ge_p1p1_to_p2(r, &t);
@@ -330,49 +368,29 @@ void ge_p3_tobytes(unsigned char *s, const ge_p3 *h) {
 }
 
 
-static unsigned char equal(signed char b, signed char c) {
-    unsigned char ub = b;
-    unsigned char uc = c;
-    unsigned char x = ub ^ uc; /* 0: yes; 1..255: no */
-    uint64_t y = x; /* 0: yes; 1..255: no */
-    y -= 1; /* large: yes; 0..254: no */
-    y >>= 63; /* 1: yes; 0: no */
-    return (unsigned char) y;
-}
-
-static unsigned char negative(signed char b) {
-    uint64_t x = b; /* 18446744073709551361..18446744073709551615: yes; 0..255: no */
-    x >>= 63; /* 1: yes; 0: no */
-    return (unsigned char) x;
-}
-
-static void cmov(ge_precomp *t, const ge_precomp *u, unsigned char b) {
-    fe_cmov(t->yplusx, u->yplusx, b);
-    fe_cmov(t->yminusx, u->yminusx, b);
-    fe_cmov(t->xy2d, u->xy2d, b);
-}
 
 
-static void select(ge_precomp *t, int pos, signed char b) {
-    ge_precomp minust;
-    unsigned char bnegative = negative(b);
-    unsigned char babs = b - (((-bnegative) & b) << 1);
-    fe_1(t->yplusx);
-    fe_1(t->yminusx);
-    fe_0(t->xy2d);
-    cmov(t, &base[pos][0], equal(babs, 1));
-    cmov(t, &base[pos][1], equal(babs, 2));
-    cmov(t, &base[pos][2], equal(babs, 3));
-    cmov(t, &base[pos][3], equal(babs, 4));
-    cmov(t, &base[pos][4], equal(babs, 5));
-    cmov(t, &base[pos][5], equal(babs, 6));
-    cmov(t, &base[pos][6], equal(babs, 7));
-    cmov(t, &base[pos][7], equal(babs, 8));
-    fe_copy(minust.yplusx, t->yminusx);
-    fe_copy(minust.yminusx, t->yplusx);
-    fe_neg(minust.xy2d, t->xy2d);
-    cmov(t, &minust, bnegative);
+static void ge_p3_cswap(ge_p3 *p, ge_p3 *q, unsigned char b) {
+    fe t;
+
+    fe_copy(t, p->X);
+    fe_cmov(p->X, q->X, b);
+    fe_cmov(q->X, t, b);
+
+    fe_copy(t, p->Y);
+    fe_cmov(p->Y, q->Y, b);
+    fe_cmov(q->Y, t, b);
+
+    fe_copy(t, p->Z);
+    fe_cmov(p->Z, q->Z, b);
+    fe_cmov(q->Z, t, b);
+
+    fe_copy(t, p->T);
+    fe_cmov(p->T, q->T, b);
+    fe_cmov(q->T, t, b);
 }
+
+
 
 /*
 h = a * B
@@ -384,53 +402,37 @@ Preconditions:
 */
 
 void ge_scalarmult_base(ge_p3 *h, const unsigned char *a) {
-    signed char e[64];
-    signed char carry;
+    ge_p3 r0;
+    ge_p3 r1;
+    ge_cached cached;
     ge_p1p1 r;
-    ge_p2 s;
-    ge_precomp t;
+    static const unsigned char basepoint[32] = {
+        0x58, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
+        0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
+        0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
+        0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66
+    };
     int i;
+    int bit;
 
-    for (i = 0; i < 32; ++i) {
-        e[2 * i + 0] = (a[i] >> 0) & 15;
-        e[2 * i + 1] = (a[i] >> 4) & 15;
+    ge_p3_0(&r0);
+    ge_frombytes_negate_vartime(&r1, basepoint);
+
+    for (i = 255; i >= 0; --i) {
+        bit = (a[i >> 3] >> (i & 7)) & 1;
+        ge_p3_cswap(&r0, &r1, (unsigned char) bit);
+
+        ge_p3_to_cached(&cached, &r1);
+        ge_add(&r, &r0, &cached);
+        ge_p1p1_to_p3(&r1, &r);
+
+        ge_p3_dbl(&r, &r0);
+        ge_p1p1_to_p3(&r0, &r);
+
+        ge_p3_cswap(&r0, &r1, (unsigned char) bit);
     }
 
-    /* each e[i] is between 0 and 15 */
-    /* e[63] is between 0 and 7 */
-    carry = 0;
-
-    for (i = 0; i < 63; ++i) {
-        e[i] += carry;
-        carry = e[i] + 8;
-        carry >>= 4;
-        e[i] -= carry << 4;
-    }
-
-    e[63] += carry;
-    /* each e[i] is between -8 and 8 */
-    ge_p3_0(h);
-
-    for (i = 1; i < 64; i += 2) {
-        select(&t, i / 2, e[i]);
-        ge_madd(&r, h, &t);
-        ge_p1p1_to_p3(h, &r);
-    }
-
-    ge_p3_dbl(&r, h);
-    ge_p1p1_to_p2(&s, &r);
-    ge_p2_dbl(&r, &s);
-    ge_p1p1_to_p2(&s, &r);
-    ge_p2_dbl(&r, &s);
-    ge_p1p1_to_p2(&s, &r);
-    ge_p2_dbl(&r, &s);
-    ge_p1p1_to_p3(h, &r);
-
-    for (i = 0; i < 64; i += 2) {
-        select(&t, i / 2, e[i]);
-        ge_madd(&r, h, &t);
-        ge_p1p1_to_p3(h, &r);
-    }
+    *h = r0;
 }
 
 
