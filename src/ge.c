@@ -78,7 +78,7 @@ void ge_double_scalarmult_vartime(ge_p2 *r, const unsigned char *a, const ge_p3 
         0x58, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
         0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
         0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
-        0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66
+        0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0xE6
     };
 
     ge_frombytes_negate_vartime(&B, basepoint);
@@ -370,28 +370,6 @@ void ge_p3_tobytes(unsigned char *s, const ge_p3 *h) {
 
 
 
-static void ge_p3_cswap(ge_p3 *p, ge_p3 *q, unsigned char b) {
-    fe t;
-
-    fe_copy(t, p->X);
-    fe_cmov(p->X, q->X, b);
-    fe_cmov(q->X, t, b);
-
-    fe_copy(t, p->Y);
-    fe_cmov(p->Y, q->Y, b);
-    fe_cmov(q->Y, t, b);
-
-    fe_copy(t, p->Z);
-    fe_cmov(p->Z, q->Z, b);
-    fe_cmov(q->Z, t, b);
-
-    fe_copy(t, p->T);
-    fe_cmov(p->T, q->T, b);
-    fe_cmov(q->T, t, b);
-}
-
-
-
 /*
 h = a * B
 where a = a[0]+256*a[1]+...+256^31 a[31]
@@ -402,37 +380,32 @@ Preconditions:
 */
 
 void ge_scalarmult_base(ge_p3 *h, const unsigned char *a) {
-    ge_p3 r0;
-    ge_p3 r1;
-    ge_cached cached;
-    ge_p1p1 r;
+    ge_p3 q;
+    ge_p3 r3;
+    ge_cached qc;
+    ge_p1p1 t;
     static const unsigned char basepoint[32] = {
         0x58, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
         0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
         0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
-        0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66
+        0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0xE6
     };
     int i;
-    int bit;
 
-    ge_p3_0(&r0);
-    ge_frombytes_negate_vartime(&r1, basepoint);
+    ge_p3_0(h);
+    ge_frombytes_negate_vartime(&q, basepoint);
 
-    for (i = 255; i >= 0; --i) {
-        bit = (a[i >> 3] >> (i & 7)) & 1;
-        ge_p3_cswap(&r0, &r1, (unsigned char) bit);
+    for (i = 0; i < 256; ++i) {
+        if ((a[i >> 3] >> (i & 7)) & 1) {
+            ge_p3_to_cached(&qc, &q);
+            ge_add(&t, h, &qc);
+            ge_p1p1_to_p3(h, &t);
+        }
 
-        ge_p3_to_cached(&cached, &r1);
-        ge_add(&r, &r0, &cached);
-        ge_p1p1_to_p3(&r1, &r);
-
-        ge_p3_dbl(&r, &r0);
-        ge_p1p1_to_p3(&r0, &r);
-
-        ge_p3_cswap(&r0, &r1, (unsigned char) bit);
+        ge_p3_dbl(&t, &q);
+        ge_p1p1_to_p3(&r3, &t);
+        q = r3;
     }
-
-    *h = r0;
 }
 
 
