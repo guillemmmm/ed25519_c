@@ -12,5 +12,8 @@ void ed25519_create_keypair(unsigned char *public_key, unsigned char *private_ke
     private_key[31] |= 64;
 
     ge_scalarmult_base(&A, private_key);
+    unsigned char s[32];
+    fe_tobytes(s, A.X);
+    bytes_print(s);
     ge_p3_tobytes(public_key, &A);
 }

@@ -56,6 +56,7 @@ void ge_tobytes(unsigned char *s, const ge_p2 *h);
 int ge_frombytes_negate_vartime(ge_p3 *h, const unsigned char *s);
 
 void ge_add(ge_p1p1 *r, const ge_p3 *p, const ge_cached *q);
+//void ge_add(ge_p1p1 *r, ge_p3 *p, ge_cached *q);
 void ge_sub(ge_p1p1 *r, const ge_p3 *p, const ge_cached *q);
 void ge_double_scalarmult_vartime(ge_p2 *r, const unsigned char *a, const ge_p3 *A, const unsigned char *b);
 void ge_madd(ge_p1p1 *r, const ge_p3 *p, const ge_precomp *q);

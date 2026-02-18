@@ -1,6 +1,9 @@
 #include "fixedint.h"
 #include "fe.h"
 
+#include <stdio.h>
+#include <string.h>
+
 
 /*
     helper functions
@@ -32,17 +35,10 @@ static uint64_t load_4(const unsigned char *in) {
     h = 0
 */
 
-void fe_0(fe h) {
-    h[0] = 0;
-    h[1] = 0;
-    h[2] = 0;
-    h[3] = 0;
-    h[4] = 0;
-    h[5] = 0;
-    h[6] = 0;
-    h[7] = 0;
-    h[8] = 0;
-    h[9] = 0;
+void fe_0(vdata *h) {
+	for(int i=0;i<8;i++){
+		*h = vupd_reg(*h, i, 0);
+	}
 }
 
 
@@ -51,17 +47,11 @@ void fe_0(fe h) {
     h = 1
 */
 
-void fe_1(fe h) {
-    h[0] = 1;
-    h[1] = 0;
-    h[2] = 0;
-    h[3] = 0;
-    h[4] = 0;
-    h[5] = 0;
-    h[6] = 0;
-    h[7] = 0;
-    h[8] = 0;
-    h[9] = 0;
+void fe_1(fe *h) {
+	*h = vupd_mem(*h, 0, 1);
+	for(int i=1;i<8;i++){
+		*h = vupd_reg(*h, i, 0);
+	}
 }
 
 
@@ -78,7 +68,10 @@ void fe_1(fe h) {
        |h| bounded by 1.1*2^26,1.1*2^25,1.1*2^26,1.1*2^25,etc.
 */
 
-void fe_add(fe h, const fe f, const fe g) {
+/*
+void fe_add(fe *h, const fe f, const fe g) {
+	*h = f + g;
+
     int32_t f0 = f[0];
     int32_t f1 = f[1];
     int32_t f2 = f[2];
@@ -120,7 +113,9 @@ void fe_add(fe h, const fe f, const fe g) {
     h[7] = h7;
     h[8] = h8;
     h[9] = h9;
+    
 }
+*/
 
 
 
@@ -131,7 +126,10 @@ void fe_add(fe h, const fe f, const fe g) {
     Preconditions: b in {0,1}.
 */
 
+/*
 void fe_cmov(fe f, const fe g, unsigned int b) {
+	// unused function, directly c_add
+
     int32_t f0 = f[0];
     int32_t f1 = f[1];
     int32_t f2 = f[2];
@@ -163,7 +161,7 @@ void fe_cmov(fe f, const fe g, unsigned int b) {
     int32_t x8 = f8 ^ g8;
     int32_t x9 = f9 ^ g9;
 
-    b = (unsigned int) (- (int) b); /* silence warning */
+    b = (unsigned int) (- (int) b); // silence warning //
     x0 &= b;
     x1 &= b;
     x2 &= b;
@@ -185,7 +183,9 @@ void fe_cmov(fe f, const fe g, unsigned int b) {
     f[7] = f7 ^ x7;
     f[8] = f8 ^ x8;
     f[9] = f9 ^ x9;
+    
 }
+*/
 
 /*
     Replace (f,g) with (g,f) if b == 1;
@@ -194,7 +194,19 @@ void fe_cmov(fe f, const fe g, unsigned int b) {
     Preconditions: b in {0,1}.
 */
 
-void fe_cswap(fe f,fe g,unsigned int b) {
+void fe_cswap(fe *f,fe *g,unsigned int b) {
+    const fe f0 = *f;
+    const fe g0 = *g;
+
+    fe f1 = f0;
+    fe g1 = g0;
+
+    f1 = cmov(f1, g0, b);   // f1 = b?g0:f0
+    g1 = cmov(g1, f0, b);   // g1 = b?f0:g0
+
+    *f = f1;
+    *g = g1;
+/*
     int32_t f0 = f[0];
     int32_t f1 = f[1];
     int32_t f2 = f[2];
@@ -225,7 +237,7 @@ void fe_cswap(fe f,fe g,unsigned int b) {
     int32_t x7 = f7 ^ g7;
     int32_t x8 = f8 ^ g8;
     int32_t x9 = f9 ^ g9;
-    b = (unsigned int) (- (int) b); /* silence warning */
+    b = (unsigned int) (- (int) b); // silence warning //
     x0 &= b;
     x1 &= b;
     x2 &= b;
@@ -256,6 +268,7 @@ void fe_cswap(fe f,fe g,unsigned int b) {
     g[7] = g7 ^ x7;
     g[8] = g8 ^ x8;
     g[9] = g9 ^ x9;
+    */
 }
 
 
@@ -264,7 +277,9 @@ void fe_cswap(fe f,fe g,unsigned int b) {
     h = f
 */
 
-void fe_copy(fe h, const fe f) {
+void fe_copy(fe *h, const fe f) {
+	*h = f;
+/*
     int32_t f0 = f[0];
     int32_t f1 = f[1];
     int32_t f2 = f[2];
@@ -286,6 +301,7 @@ void fe_copy(fe h, const fe f) {
     h[7] = f7;
     h[8] = f8;
     h[9] = f9;
+    */
 }
 
 
@@ -294,7 +310,18 @@ void fe_copy(fe h, const fe f) {
     Ignores top bit of h.
 */
 
-void fe_frombytes(fe h, const unsigned char *s) {
+void fe_frombytes(fe *h, const unsigned char *s) {
+	uint32_t data;
+	for (int i=0;i<8;i++){
+		data = (uint32_t)(*(s+4*i+0));
+		data |= ((uint32_t)(*(s+4*i+1)))<<8;
+		data |= ((uint32_t)(*(s+4*i+2)))<<16;
+		data |= ((uint32_t)(*(s+4*i+3)))<<24;
+		*h = vupd_reg(*h, i, data); 
+	}
+	
+	*h = vupd_reg( *h, 7, vext_reg(*h, 7)&0x7FFFFFFF ); // posem a 0 bit 255
+/*
     int64_t h0 = load_4(s);
     int64_t h1 = load_3(s + 4) << 6;
     int64_t h2 = load_3(s + 7) << 5;
@@ -357,94 +384,128 @@ void fe_frombytes(fe h, const unsigned char *s) {
     h[7] = (int32_t) h7;
     h[8] = (int32_t) h8;
     h[9] = (int32_t) h9;
+    */
 }
 
 
 
-void fe_invert(fe out, const fe z) {
+void fe_invert(fe *out, const fe z) {
     fe t0;
     fe t1;
     fe t2;
     fe t3;
     int i;
 
-    fe_sq(t0, z);
+    //fe_sq(t0, z);
+    t0 = z*z;
 
     for (i = 1; i < 1; ++i) {
-        fe_sq(t0, t0);
+        //fe_sq(t0, t0);
+        t0 = t0*t0;
     }
 
-    fe_sq(t1, t0);
+    //fe_sq(t1, t0);
+    t1 = t0*t0;
 
     for (i = 1; i < 2; ++i) {
-        fe_sq(t1, t1);
+        //fe_sq(t1, t1);
+        t1 = t1*t1;
     }
 
-    fe_mul(t1, z, t1);
-    fe_mul(t0, t0, t1);
-    fe_sq(t2, t0);
+    //fe_mul(t1, z, t1);
+    t1 = z*t1;
+    //fe_mul(t0, t0, t1);
+    t0 = t0*t1;
+   // fe_sq(t2, t0);
+   t2 = t0*t0;
 
     for (i = 1; i < 1; ++i) {
-        fe_sq(t2, t2);
+        //fe_sq(t2, t2);
+        t2 = t2*t2;
     }
 
-    fe_mul(t1, t1, t2);
-    fe_sq(t2, t1);
+    //fe_mul(t1, t1, t2);
+    t1 = t1*t2;
+    //fe_sq(t2, t1);
+    t2 = t1*t1;
 
     for (i = 1; i < 5; ++i) {
-        fe_sq(t2, t2);
+        //fe_sq(t2, t2);
+        t2 = t2*t2;
     }
 
-    fe_mul(t1, t2, t1);
-    fe_sq(t2, t1);
+    //fe_mul(t1, t2, t1);
+    t1 = t1*t2;
+    //fe_sq(t2, t1);
+    t2 = t1*t1;
 
     for (i = 1; i < 10; ++i) {
-        fe_sq(t2, t2);
+        //fe_sq(t2, t2);
+        t2 = t2*t2;
     }
 
-    fe_mul(t2, t2, t1);
-    fe_sq(t3, t2);
+    //fe_mul(t2, t2, t1);
+    t2 = t2*t1;
+    //fe_sq(t3, t2);
+    t3 = t2*t2;
 
     for (i = 1; i < 20; ++i) {
-        fe_sq(t3, t3);
+        //fe_sq(t3, t3);
+        t3 = t3*t3;
     }
 
-    fe_mul(t2, t3, t2);
-    fe_sq(t2, t2);
+    //fe_mul(t2, t3, t2);
+    t2 = t2*t3;
+    //fe_sq(t2, t2);
+    t2 = t2*t2;
 
     for (i = 1; i < 10; ++i) {
-        fe_sq(t2, t2);
+        //fe_sq(t2, t2);
+        t2 = t2*t2;
     }
 
-    fe_mul(t1, t2, t1);
-    fe_sq(t2, t1);
+    //fe_mul(t1, t2, t1);
+    t1 = t1*t2;
+    //fe_sq(t2, t1);
+    t2 = t1*t1;
 
     for (i = 1; i < 50; ++i) {
-        fe_sq(t2, t2);
+        //fe_sq(t2, t2);
+        t2 = t2*t2;
     }
 
-    fe_mul(t2, t2, t1);
-    fe_sq(t3, t2);
+    //fe_mul(t2, t2, t1);
+    t2 = t1*t2;
+    //fe_sq(t3, t2);
+    t3 = t2*t2;
 
     for (i = 1; i < 100; ++i) {
-        fe_sq(t3, t3);
+        //fe_sq(t3, t3);
+        t3 = t3*t3;
     }
 
-    fe_mul(t2, t3, t2);
-    fe_sq(t2, t2);
+    //fe_mul(t2, t3, t2);
+    t2 = t2*t3;
+    //fe_sq(t2, t2);
+    t2 = t2*t2;
 
     for (i = 1; i < 50; ++i) {
-        fe_sq(t2, t2);
+        //fe_sq(t2, t2);
+        t2 = t2*t2;
     }
 
-    fe_mul(t1, t2, t1);
-    fe_sq(t1, t1);
+    //fe_mul(t1, t2, t1);
+    t1 = t1*t2;
+    //fe_sq(t1, t1);
+    t1 = t1*t1;
 
     for (i = 1; i < 5; ++i) {
-        fe_sq(t1, t1);
+        //fe_sq(t1, t1);
+        t1 = t1*t1;
     }
 
-    fe_mul(out, t1, t0);
+    //fe_mul(out, t1, t0);
+    *out = t0*t1;
 }
 
 
@@ -457,12 +518,27 @@ void fe_invert(fe out, const fe z) {
        |f| bounded by 1.1*2^26,1.1*2^25,1.1*2^26,1.1*2^25,etc.
 */
 
-int fe_isnegative(const fe f) {
-    unsigned char s[32];
-
-    fe_tobytes(s, f);
-    
-    return s[0] & 1;
+void fe_reduce(fe *h, const fe in){
+	fe p = chess_dont_care(vdata);
+	fe r;
+	// cargamos el valor de p
+	p = vupd_mem(p, 7, 0xFFFFFFEDu);
+	p = vupd_mem(p, 6, 0xFFFFFFFFu);
+	p = vupd_mem(p, 5, 0xFFFFFFFFu);
+	p = vupd_mem(p, 4, 0xFFFFFFFFu);
+	p = vupd_mem(p, 3, 0xFFFFFFFFu);
+	p = vupd_mem(p, 2, 0xFFFFFFFFu);
+	p = vupd_mem(p, 1, 0xFFFFFFFFu);
+	p = vupd_mem(p, 0, 0xFFFFFFFFu);
+	
+	uint32_t borr;
+	r = vsub(in, p, borr);
+	if(borr){
+		// ja ho tenim canonitzat
+		*h = in; 
+	} else {
+		*h = r;
+	}	
 }
 
 
@@ -476,47 +552,13 @@ int fe_isnegative(const fe f) {
 */
 
 int fe_isnonzero(const fe f) {
-    unsigned char s[32];
-    unsigned char r;
+    
+    uint32_t val = 0;
+    for(int i=0;i<8;i++){
+    	val |= vext_reg(f, i);
+    }
 
-    fe_tobytes(s, f);
-
-    r = s[0];
-    #define F(i) r |= s[i]
-    F(1);
-    F(2);
-    F(3);
-    F(4);
-    F(5);
-    F(6);
-    F(7);
-    F(8);
-    F(9);
-    F(10);
-    F(11);
-    F(12);
-    F(13);
-    F(14);
-    F(15);
-    F(16);
-    F(17);
-    F(18);
-    F(19);
-    F(20);
-    F(21);
-    F(22);
-    F(23);
-    F(24);
-    F(25);
-    F(26);
-    F(27);
-    F(28);
-    F(29);
-    F(30);
-    F(31);
-    #undef F
-
-    return r != 0;
+    return (val != 0);
 }
 
 
@@ -553,6 +595,7 @@ int fe_isnonzero(const fe f) {
     With tighter constraints on inputs can squeeze carries into int32.
 */
 
+/*
 void fe_mul(fe h, const fe f, const fe g) {
     int32_t f0 = f[0];
     int32_t f1 = f[1];
@@ -574,8 +617,8 @@ void fe_mul(fe h, const fe f, const fe g) {
     int32_t g7 = g[7];
     int32_t g8 = g[8];
     int32_t g9 = g[9];
-    int32_t g1_19 = 19 * g1; /* 1.959375*2^29 */
-    int32_t g2_19 = 19 * g2; /* 1.959375*2^30; still ok */
+    int32_t g1_19 = 19 * g1; // 1.959375*2^29 //
+    int32_t g2_19 = 19 * g2; // 1.959375*2^30; still ok //
     int32_t g3_19 = 19 * g3;
     int32_t g4_19 = 19 * g4;
     int32_t g5_19 = 19 * g5;
@@ -764,7 +807,7 @@ void fe_mul(fe h, const fe f, const fe g) {
     h[9] = (int32_t) h9;
 }
 
-
+*/
 /*
 h = f * 121666
 Can overlap h with f.
@@ -775,7 +818,7 @@ Preconditions:
 Postconditions:
    |h| bounded by 1.1*2^25,1.1*2^24,1.1*2^25,1.1*2^24,etc.
 */
-
+/*
 void fe_mul121666(fe h, fe f) {
     int32_t f0 = f[0];
     int32_t f1 = f[1];
@@ -831,7 +874,7 @@ void fe_mul121666(fe h, fe f) {
     h[8] = (int32_t) h8;
     h[9] = (int32_t) h9;
 }
-
+*/
 
 /*
 h = -f
@@ -843,7 +886,15 @@ Postconditions:
    |h| bounded by 1.1*2^25,1.1*2^24,1.1*2^25,1.1*2^24,etc.
 */
 
-void fe_neg(fe h, const fe f) {
+void fe_neg(fe *h, const fe f) {
+
+	fe g = chess_dont_care(vdata);
+	for(int i=0;i<8;i++){
+		g = vupd_reg(g, i, 0);
+	}
+	uint32_t trash;
+	*h = vsub(g, f, trash);
+/*
     int32_t f0 = f[0];
     int32_t f1 = f[1];
     int32_t f2 = f[2];
@@ -875,91 +926,125 @@ void fe_neg(fe h, const fe f) {
     h[7] = h7;
     h[8] = h8;
     h[9] = h9;
+    */
 }
 
 
-void fe_pow22523(fe out, const fe z) {
+void fe_pow22523(fe *out, const fe z) {
     fe t0;
     fe t1;
     fe t2;
     int i;
-    fe_sq(t0, z);
+    //fe_sq(t0, z);
+    t0 = z*z;
 
     for (i = 1; i < 1; ++i) {
-        fe_sq(t0, t0);
+        //fe_sq(t0, t0);
+        t0 = t0*t0;
     }
 
-    fe_sq(t1, t0);
+    //fe_sq(t1, t0);
+    t1 = t0*t0;
 
     for (i = 1; i < 2; ++i) {
-        fe_sq(t1, t1);
+        //fe_sq(t1, t1);
+        t1 = t1*t1;
     }
 
-    fe_mul(t1, z, t1);
-    fe_mul(t0, t0, t1);
-    fe_sq(t0, t0);
+    //fe_mul(t1, z, t1);
+    t1 = z*t1;
+    //fe_mul(t0, t0, t1);
+    t0 = t0*t1;
+    //fe_sq(t0, t0);
+    t0 = t0*t0;
 
     for (i = 1; i < 1; ++i) {
-        fe_sq(t0, t0);
+        //fe_sq(t0, t0);
+        t0 = t0*t0;
     }
 
-    fe_mul(t0, t1, t0);
-    fe_sq(t1, t0);
+    //fe_mul(t0, t1, t0);
+    t0 = t0*t1;
+    //fe_sq(t1, t0);
+    t1 = t0*t0;
 
     for (i = 1; i < 5; ++i) {
-        fe_sq(t1, t1);
+        //fe_sq(t1, t1);
+        t1 = t1*t1;
     }
 
-    fe_mul(t0, t1, t0);
-    fe_sq(t1, t0);
+    //fe_mul(t0, t1, t0);
+    t0 = t0*t1;
+    //fe_sq(t1, t0);
+    t1 = t0*t0;
 
     for (i = 1; i < 10; ++i) {
-        fe_sq(t1, t1);
+        //fe_sq(t1, t1);
+        t1 = t1*t1;
     }
 
-    fe_mul(t1, t1, t0);
-    fe_sq(t2, t1);
+    //fe_mul(t1, t1, t0);
+    t1 = t0*t1;
+    //fe_sq(t2, t1);
+    t2 = t1*t1;
 
     for (i = 1; i < 20; ++i) {
-        fe_sq(t2, t2);
+        //fe_sq(t2, t2);
+        t2 = t2*t2;
     }
 
-    fe_mul(t1, t2, t1);
-    fe_sq(t1, t1);
+    //fe_mul(t1, t2, t1);
+    t1 = t1*t2;
+    //fe_sq(t1, t1);
+    t1 = t1*t1;
 
     for (i = 1; i < 10; ++i) {
-        fe_sq(t1, t1);
+        //fe_sq(t1, t1);
+        t1 = t1*t1;
     }
 
-    fe_mul(t0, t1, t0);
-    fe_sq(t1, t0);
+    //fe_mul(t0, t1, t0);
+        t0 = t0*t1;
+    //fe_sq(t1, t0);
+        t1 = t0*t0;
 
     for (i = 1; i < 50; ++i) {
-        fe_sq(t1, t1);
+        //fe_sq(t1, t1);
+        t1 = t1*t1;
     }
 
-    fe_mul(t1, t1, t0);
-    fe_sq(t2, t1);
+    //fe_mul(t1, t1, t0);
+    t1 = t0*t1;
+    //fe_sq(t2, t1);
+    t2 = t1*t1;
 
     for (i = 1; i < 100; ++i) {
-        fe_sq(t2, t2);
+        //fe_sq(t2, t2);
+        t2 = t2*t2;
     }
 
-    fe_mul(t1, t2, t1);
-    fe_sq(t1, t1);
+    //fe_mul(t1, t2, t1);
+    t1 = t1*t2;
+    //fe_sq(t1, t1);
+    t1 = t1*t1;
 
     for (i = 1; i < 50; ++i) {
-        fe_sq(t1, t1);
+        //fe_sq(t1, t1);
+        t1 = t1*t1;
     }
 
-    fe_mul(t0, t1, t0);
-    fe_sq(t0, t0);
+    //fe_mul(t0, t1, t0);
+    t0 = t0*t1;
+    //fe_sq(t0, t0);
+    t0 = t0*t0;
 
     for (i = 1; i < 2; ++i) {
-        fe_sq(t0, t0);
+        //fe_sq(t0, t0);
+        t0 = t0*t0;
     }
 
-    fe_mul(out, t0, z);
+    //fe_mul(out, t0, z);
+    *out = t0*z;
     return;
 }
 
@@ -979,6 +1064,7 @@ Postconditions:
 See fe_mul.c for discussion of implementation strategy.
 */
 
+/*
 void fe_sq(fe h, const fe f) {
     int32_t f0 = f[0];
     int32_t f1 = f[1];
@@ -998,11 +1084,11 @@ void fe_sq(fe h, const fe f) {
     int32_t f5_2 = 2 * f5;
     int32_t f6_2 = 2 * f6;
     int32_t f7_2 = 2 * f7;
-    int32_t f5_38 = 38 * f5; /* 1.959375*2^30 */
-    int32_t f6_19 = 19 * f6; /* 1.959375*2^30 */
-    int32_t f7_38 = 38 * f7; /* 1.959375*2^30 */
-    int32_t f8_19 = 19 * f8; /* 1.959375*2^30 */
-    int32_t f9_38 = 38 * f9; /* 1.959375*2^30 */
+    int32_t f5_38 = 38 * f5; // 1.959375*2^30 /
+    int32_t f6_19 = 19 * f6; // 1.959375*2^30 /
+    int32_t f7_38 = 38 * f7; // 1.959375*2^30 /
+    int32_t f8_19 = 19 * f8; // 1.959375*2^30 /
+    int32_t f9_38 = 38 * f9; // 1.959375*2^30 /
     int64_t f0f0    = f0   * (int64_t) f0;
     int64_t f0f1_2  = f0_2 * (int64_t) f1;
     int64_t f0f2_2  = f0_2 * (int64_t) f2;
@@ -1125,7 +1211,7 @@ void fe_sq(fe h, const fe f) {
     h[8] = (int32_t) h8;
     h[9] = (int32_t) h9;
 }
-
+*/
 
 /*
 h = 2 * f * f
@@ -1142,7 +1228,16 @@ Postconditions:
 See fe_mul.c for discussion of implementation strategy.
 */
 
-void fe_sq2(fe h, const fe f) {
+void fe_sq2(fe *h, const fe f) {
+	
+	*h = f*f;
+	fe g = chess_dont_care(vdata);
+	g = vupd_mem(g, 0, 2);
+	for(int i=1;i<8;i++){
+		g = vupd_reg(g, i, 0);
+	}
+	*h = *h * g;
+/*
     int32_t f0 = f[0];
     int32_t f1 = f[1];
     int32_t f2 = f[2];
@@ -1161,11 +1256,11 @@ void fe_sq2(fe h, const fe f) {
     int32_t f5_2 = 2 * f5;
     int32_t f6_2 = 2 * f6;
     int32_t f7_2 = 2 * f7;
-    int32_t f5_38 = 38 * f5; /* 1.959375*2^30 */
-    int32_t f6_19 = 19 * f6; /* 1.959375*2^30 */
-    int32_t f7_38 = 38 * f7; /* 1.959375*2^30 */
-    int32_t f8_19 = 19 * f8; /* 1.959375*2^30 */
-    int32_t f9_38 = 38 * f9; /* 1.959375*2^30 */
+    int32_t f5_38 = 38 * f5; // 1.959375*2^30 /
+    int32_t f6_19 = 19 * f6; // 1.959375*2^30 /
+    int32_t f7_38 = 38 * f7; // 1.959375*2^30 /
+    int32_t f8_19 = 19 * f8; // 1.959375*2^30 /
+    int32_t f9_38 = 38 * f9; // 1.959375*2^30 /
     int64_t f0f0    = f0   * (int64_t) f0;
     int64_t f0f1_2  = f0_2 * (int64_t) f1;
     int64_t f0f2_2  = f0_2 * (int64_t) f2;
@@ -1297,6 +1392,7 @@ void fe_sq2(fe h, const fe f) {
     h[7] = (int32_t) h7;
     h[8] = (int32_t) h8;
     h[9] = (int32_t) h9;
+    */
 }
 
 
@@ -1312,6 +1408,15 @@ Postconditions:
    |h| bounded by 1.1*2^26,1.1*2^25,1.1*2^26,1.1*2^25,etc.
 */
 
+int fe_isnegative(const fe f) {
+    unsigned char s[32];
+
+    fe_tobytes(s, f);
+    
+    return s[0] & 1;
+}
+
+/*
 void fe_sub(fe h, const fe f, const fe g) {
     int32_t f0 = f[0];
     int32_t f1 = f[1];
@@ -1355,6 +1460,7 @@ void fe_sub(fe h, const fe f, const fe g) {
     h[8] = h8;
     h[9] = h9;
 }
+*/
 
 
 
@@ -1384,6 +1490,22 @@ Proof:
 */
 
 void fe_tobytes(unsigned char *s, const fe h) {
+	fe r;
+	uint32_t value;
+	uint8_t* value8;
+	fe_reduce(&r, h);
+	for(int i=0;i<8;i++){
+		value = vext_reg(r, i);
+		value8 = (uint8_t*)&value;
+		for(int j=0;j<4;j++){
+			s[4*i+j]=*(value8+j);
+		}		
+	}
+	if(s[31]>>31) {
+		//error
+		fe_tobytes(s, r);	
+	}
+/*
     int32_t h0 = h[0];
     int32_t h1 = h[1];
     int32_t h2 = h[2];
@@ -1416,9 +1538,9 @@ void fe_tobytes(unsigned char *s, const fe h) {
     q = (h7 + q) >> 25;
     q = (h8 + q) >> 26;
     q = (h9 + q) >> 25;
-    /* Goal: Output h-(2^255-19)q, which is between 0 and 2^255-20. */
+    // Goal: Output h-(2^255-19)q, which is between 0 and 2^255-20. //
     h0 += 19 * q;
-    /* Goal: Output h-2^255 q, which is between 0 and 2^255-20. */
+    // Goal: Output h-2^255 q, which is between 0 and 2^255-20. //
     carry0 = h0 >> 26;
     h1 += carry0;
     h0 -= carry0 << 26;
@@ -1449,13 +1571,13 @@ void fe_tobytes(unsigned char *s, const fe h) {
     carry9 = h9 >> 25;
     h9 -= carry9 << 25;
 
-    /* h10 = carry9 */
-    /*
-    Goal: Output h0+...+2^255 h10-2^255 q, which is between 0 and 2^255-20.
-    Have h0+...+2^230 h9 between 0 and 2^255-1;
-    evidently 2^255 h10-2^255 q = 0.
-    Goal: Output h0+...+2^230 h9.
-    */
+    // h10 = carry9 //
+    
+    //Goal: Output h0+...+2^255 h10-2^255 q, which is between 0 and 2^255-20.
+    //Have h0+...+2^230 h9 between 0 and 2^255-1;
+    //evidently 2^255 h10-2^255 q = 0.
+    //Goal: Output h0+...+2^230 h9.
+    
     s[0] = (unsigned char) (h0 >> 0);
     s[1] = (unsigned char) (h0 >> 8);
     s[2] = (unsigned char) (h0 >> 16);
@@ -1488,4 +1610,15 @@ void fe_tobytes(unsigned char *s, const fe h) {
     s[29] = (unsigned char) (h9 >> 2);
     s[30] = (unsigned char) (h9 >> 10);
     s[31] = (unsigned char) (h9 >> 18);
+    */
+}
+
+
+//debug
+void bytes_print(const unsigned char *s){
+    printf("Byte : ");
+    for(int i=31;i>=0;i--){
+        printf("%0x", *(s+i));
+    }
+    printf("\n");
 }
